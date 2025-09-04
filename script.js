@@ -1,141 +1,127 @@
-// Dust.tt AI Agent Integration
+// Supabase Integration for Dust.tt AI Agent
 class DustTTService {
     constructor() {
-        this.apiKey = this.getApiKey();
-        this.baseUrl = 'https://dust.tt/api/v1';
-        this.agentId = this.getAgentId();
-    }
-    
-    getApiKey() {
-        // Try to get from localStorage first, then prompt user
-        let apiKey = localStorage.getItem('dust_api_key');
-        if (!apiKey) {
-            apiKey = prompt('Please enter your Dust.tt API key:');
-            if (apiKey) {
-                localStorage.setItem('dust_api_key', apiKey);
-            }
-        }
-        return apiKey;
-    }
-    
-    getAgentId() {
-        // Try to get from localStorage first, then prompt user
-        let agentId = localStorage.getItem('dust_agent_id');
-        if (!agentId) {
-            agentId = prompt('Please enter your Dust.tt Agent ID:');
-            if (agentId) {
-                localStorage.setItem('dust_agent_id', agentId);
-            }
-        }
-        return agentId;
+        this.supabaseUrl = 'https://iiolvvdnzrfcffudwocp.supabase.co';
+        this.supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlpb2x2dmRuenJmY2ZmdWR3b2NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU2MTIxNzQsImV4cCI6MjA3MTE4ODE3NH0.zm_bLL3lu2hXKqZdIHzH-bIgVwd1cM1jb7Cju92sl6E';
+        this.workspaceId = 'tcYbszCY4S';
+        this.configurationId = 'Jdb8Fh2uDn';
+        this.conversationId = null;
     }
     
     async analyzeImage(imageDataUrl, prompt = "Rate this design and provide feedback") {
-        if (!this.apiKey || !this.agentId) {
-            throw new Error('API key or Agent ID not configured');
-        }
-        
         try {
-            // Convert data URL to base64
-            const base64Data = imageDataUrl.split(',')[1];
+            console.log('🤖 Sending image to Dust.tt via Supabase edge function...');
             
-            // Create the request payload
+            // Upload image to Supabase storage first, then get URL
+            const imageUrl = await this.uploadImageToStorage(imageDataUrl);
+            
+            // Create request payload matching the edge function expectations
             const payload = {
-                agent_id: this.agentId,
-                inputs: [
-                    {
-                        type: "text",
-                        value: prompt
-                    },
-                    {
-                        type: "image",
-                        value: base64Data
-                    }
-                ]
+                content: prompt,
+                imageUrl: imageUrl,
+                action: 'analyze',
+                username: 'web-user',
+                timezone: 'UTC'
             };
             
-            console.log('📤 Sending request to Dust.tt:', payload);
+            // Add conversation ID if we have one
+            if (this.conversationId) {
+                payload.conversationId = this.conversationId;
+            }
             
-            const response = await fetch(`${this.baseUrl}/agents/${this.agentId}/runs`, {
+            // Call the Supabase edge function
+            const edgeFunctionResponse = await fetch(`${this.supabaseUrl}/functions/v1/design-brain`, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${this.apiKey}`,
-                    'Content-Type': 'application/json'
+                    'Authorization': `Bearer ${this.supabaseKey}`,
+                    'Content-Type': 'application/json',
                 },
                 body: JSON.stringify(payload)
             });
             
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            if (!edgeFunctionResponse.ok) {
+                const errorText = await edgeFunctionResponse.text();
+                throw new Error(`Edge function error: ${edgeFunctionResponse.status} - ${errorText}`);
             }
             
-            const result = await response.json();
-            console.log('📥 Initial response from Dust.tt:', result);
+            const result = await edgeFunctionResponse.json();
+            console.log('📥 Response from edge function:', result);
             
-            // If we have a run_id, poll for the final result
-            if (result.run_id) {
-                return await this.pollForResult(result.run_id);
+            // Store conversation ID for future requests
+            if (result.data && result.data.conversationId) {
+                this.conversationId = result.data.conversationId;
             }
             
             return result;
             
         } catch (error) {
-            console.error('Error calling Dust.tt API:', error);
+            console.error('Error calling Dust.tt via Supabase:', error);
             throw error;
         }
     }
     
-    async pollForResult(runId, maxAttempts = 30) {
-        console.log('🔄 Polling for result, run ID:', runId);
-        
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-            try {
-                const status = await this.getRunStatus(runId);
-                console.log(`📊 Attempt ${attempt}: Status:`, status.status);
-                
-                if (status.status === 'completed') {
-                    console.log('✅ Run completed, final result:', status);
-                    return status;
-                } else if (status.status === 'failed') {
-                    throw new Error(`Run failed: ${status.error || 'Unknown error'}`);
-                } else if (status.status === 'cancelled') {
-                    throw new Error('Run was cancelled');
-                }
-                
-                // Wait 2 seconds before next poll
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                
-            } catch (error) {
-                console.error(`Error polling attempt ${attempt}:`, error);
-                if (attempt === maxAttempts) {
-                    throw error;
-                }
+    async uploadImageToStorage(imageDataUrl) {
+        try {
+            console.log('📤 Uploading image to Supabase storage...');
+            
+            // Convert data URL to blob
+            const response = await fetch(imageDataUrl);
+            const blob = await response.blob();
+            
+            // Generate unique filename
+            const filename = `design-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.jpg`;
+            
+            // Upload to Supabase storage
+            const uploadResponse = await fetch(`${this.supabaseUrl}/storage/v1/object/design-screens/${filename}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.supabaseKey}`,
+                },
+                body: blob
+            });
+            
+            if (!uploadResponse.ok) {
+                const errorText = await uploadResponse.text();
+                throw new Error(`Storage upload failed: ${uploadResponse.status} - ${errorText}`);
             }
+            
+            // Return the public URL
+            const publicUrl = `${this.supabaseUrl}/storage/v1/object/public/design-screens/${filename}`;
+            console.log('✅ Image uploaded to storage:', publicUrl);
+            return publicUrl;
+            
+        } catch (error) {
+            console.error('❌ Error uploading to storage:', error);
+            throw error;
         }
-        
-        throw new Error('Timeout waiting for Dust.tt response');
     }
     
-    async getRunStatus(runId) {
-        if (!this.apiKey || !this.agentId) {
-            throw new Error('API key or Agent ID not configured');
-        }
-        
+    async testConnection() {
         try {
-            const response = await fetch(`${this.baseUrl}/agents/${this.agentId}/runs/${runId}`, {
+            console.log('🔍 Testing connection to Supabase edge function...');
+            
+            const response = await fetch(`${this.supabaseUrl}/functions/v1/design-brain`, {
+                method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${this.apiKey}`
-                }
+                    'Authorization': `Bearer ${this.supabaseKey}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    content: 'Hello, this is a test message to verify the connection is working properly.'
+                })
             });
             
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorText = await response.text();
+                throw new Error(`Connection test failed: ${response.status} - ${errorText}`);
             }
             
-            return await response.json();
+            const result = await response.json();
+            console.log('✅ Connection test successful:', result);
+            return result;
             
         } catch (error) {
-            console.error('Error getting run status:', error);
+            console.error('❌ Connection test failed:', error);
             throw error;
         }
     }
@@ -181,9 +167,9 @@ class ImageCanvas {
         this.clearBtn.addEventListener('click', () => this.clearAll());
         
         // Configuration panel events
-        const saveConfigBtn = document.getElementById('saveConfigBtn');
-        if (saveConfigBtn) {
-            saveConfigBtn.addEventListener('click', () => this.saveConfiguration());
+        const testConnectionBtn = document.getElementById('testConnectionBtn');
+        if (testConnectionBtn) {
+            testConnectionBtn.addEventListener('click', () => this.testConnection());
         }
         
         // Canvas events
@@ -577,12 +563,28 @@ Please format your response clearly with ratings and actionable feedback.`;
         } catch (error) {
             console.error('❌ Error processing image with AI:', error);
             
-            // Show error state
-            this.showProcessingError(imageContainer, error.message);
+            // Enhanced error handling with more specific messages
+            let errorMessage = error.message;
+            let userFriendlyMessage = 'An error occurred while processing your image.';
             
-            // Also try to create a frame with error information
+            if (error.message.includes('Failed to fetch')) {
+                userFriendlyMessage = 'Network error: Unable to connect to the AI service. Please check your internet connection and try again.';
+            } else if (error.message.includes('Edge function error')) {
+                userFriendlyMessage = 'Server error: The AI service is temporarily unavailable. Please try again in a few moments.';
+            } else if (error.message.includes('CORS')) {
+                userFriendlyMessage = 'Configuration error: Please ensure the Supabase edge function is properly configured.';
+            } else if (error.message.includes('401') || error.message.includes('403')) {
+                userFriendlyMessage = 'Authentication error: Please check the API credentials configuration.';
+            } else if (error.message.includes('timeout') || error.message.includes('Timeout')) {
+                userFriendlyMessage = 'Request timeout: The AI service is taking longer than expected. Please try again.';
+            }
+            
+            // Show error state
+            this.showProcessingError(imageContainer, userFriendlyMessage);
+            
+            // Create a detailed error frame for debugging
             this.createAIResponseFrame(
-                `Error: ${error.message}\n\nPlease check your Dust.tt API configuration and try again.`,
+                `❌ AI Processing Error\n\n${userFriendlyMessage}\n\nTechnical details: ${errorMessage}`,
                 null,
                 '',
                 imageContainer
@@ -625,12 +627,22 @@ Please format your response clearly with ratings and actionable feedback.`;
             existingFeedback.remove();
         }
         
-        // Extract the AI response text from Dust.tt API response
+        // Extract the AI response text from Supabase edge function response
         let feedbackText = 'AI analysis complete!';
         console.log('🔍 Processing AI result:', aiResult);
         
-        if (aiResult && aiResult.outputs && aiResult.outputs.length > 0) {
-            // Dust.tt typically returns outputs array
+        // Handle Supabase edge function response format
+        if (aiResult && aiResult.data && aiResult.data.text) {
+            // Your edge function returns: { ok: true, data: { text: "...", conversationId: "...", fileId: "..." } }
+            feedbackText = aiResult.data.text;
+        } else if (aiResult && aiResult.response) {
+            // Direct response from edge function
+            feedbackText = aiResult.response;
+        } else if (aiResult && aiResult.message) {
+            // Message field from edge function
+            feedbackText = aiResult.message;
+        } else if (aiResult && aiResult.outputs && aiResult.outputs.length > 0) {
+            // Dust.tt native format (if passed through)
             const output = aiResult.outputs[0];
             if (output && output.value) {
                 feedbackText = output.value;
@@ -647,6 +659,9 @@ Please format your response clearly with ratings and actionable feedback.`;
         } else if (aiResult && aiResult.result) {
             // Another possible response format
             feedbackText = aiResult.result;
+        } else if (typeof aiResult === 'string') {
+            // Direct string response
+            feedbackText = aiResult;
         }
         
         console.log('📝 Extracted feedback text:', feedbackText);
@@ -1213,50 +1228,44 @@ Please format your response clearly with ratings and actionable feedback.`;
     }
     
     loadConfiguration() {
-        const apiKeyInput = document.getElementById('apiKeyInput');
-        const agentIdInput = document.getElementById('agentIdInput');
-        
-        if (apiKeyInput && agentIdInput) {
-            // Load saved values from localStorage
-            const savedApiKey = localStorage.getItem('dust_api_key');
-            const savedAgentId = localStorage.getItem('dust_agent_id');
-            
-            if (savedApiKey) apiKeyInput.value = savedApiKey;
-            if (savedAgentId) agentIdInput.value = savedAgentId;
-        }
+        // Configuration is now hardcoded in the service
+        console.log('✅ Dust.tt configuration loaded via Supabase integration');
     }
     
-    saveConfiguration() {
-        const apiKeyInput = document.getElementById('apiKeyInput');
-        const agentIdInput = document.getElementById('agentIdInput');
+    async testConnection() {
         const configStatus = document.getElementById('configStatus');
+        const testBtn = document.getElementById('testConnectionBtn');
         
-        if (apiKeyInput && agentIdInput && configStatus) {
-            const apiKey = apiKeyInput.value.trim();
-            const agentId = agentIdInput.value.trim();
+        if (configStatus && testBtn) {
+            // Show loading state
+            testBtn.disabled = true;
+            testBtn.textContent = 'Testing...';
+            configStatus.textContent = '🔄 Testing connection...';
+            configStatus.style.color = '#f59e0b';
             
-            if (!apiKey || !agentId) {
-                configStatus.textContent = '❌ Please fill in both fields';
+            try {
+                await dustService.testConnection();
+                
+                // Show success
+                configStatus.textContent = '✅ Connection successful!';
+                configStatus.style.color = '#10b981';
+                
+            } catch (error) {
+                console.error('Connection test failed:', error);
+                
+                // Show error
+                configStatus.textContent = `❌ Connection failed: ${error.message}`;
                 configStatus.style.color = '#ef4444';
-                return;
+            } finally {
+                // Reset button
+                testBtn.disabled = false;
+                testBtn.textContent = 'Test Connection';
+                
+                // Clear message after 5 seconds
+                setTimeout(() => {
+                    configStatus.textContent = '';
+                }, 5000);
             }
-            
-            // Save to localStorage
-            localStorage.setItem('dust_api_key', apiKey);
-            localStorage.setItem('dust_agent_id', agentId);
-            
-            // Update the global service
-            dustService.apiKey = apiKey;
-            dustService.agentId = agentId;
-            
-            // Show success message
-            configStatus.textContent = '✅ Settings saved successfully!';
-            configStatus.style.color = '#10b981';
-            
-            // Clear message after 3 seconds
-            setTimeout(() => {
-                configStatus.textContent = '';
-            }, 3000);
         }
     }
 }

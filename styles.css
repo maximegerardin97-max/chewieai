@@ -1062,6 +1062,31 @@ body {
   transform: translateY(-1px);
 }
 
+.config-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.config-info {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  background: hsl(var(--muted) / 0.3);
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border));
+}
+
+.config-info p {
+  margin: 0.25rem 0;
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.config-info p:first-child {
+  color: hsl(var(--primary));
+  font-weight: 600;
+}
+
 /* Processing Indicator Styles */
 .processing-indicator {
   position: absolute;

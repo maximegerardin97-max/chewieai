@@ -1,3 +1,149 @@
+// Dust.tt AI Agent Integration
+class DustTTService {
+    constructor() {
+        this.apiKey = this.getApiKey();
+        this.baseUrl = 'https://dust.tt/api/v1';
+        this.agentId = this.getAgentId();
+    }
+    
+    getApiKey() {
+        // Try to get from localStorage first, then prompt user
+        let apiKey = localStorage.getItem('dust_api_key');
+        if (!apiKey) {
+            apiKey = prompt('Please enter your Dust.tt API key:');
+            if (apiKey) {
+                localStorage.setItem('dust_api_key', apiKey);
+            }
+        }
+        return apiKey;
+    }
+    
+    getAgentId() {
+        // Try to get from localStorage first, then prompt user
+        let agentId = localStorage.getItem('dust_agent_id');
+        if (!agentId) {
+            agentId = prompt('Please enter your Dust.tt Agent ID:');
+            if (agentId) {
+                localStorage.setItem('dust_agent_id', agentId);
+            }
+        }
+        return agentId;
+    }
+    
+    async analyzeImage(imageDataUrl, prompt = "Rate this design and provide feedback") {
+        if (!this.apiKey || !this.agentId) {
+            throw new Error('API key or Agent ID not configured');
+        }
+        
+        try {
+            // Convert data URL to base64
+            const base64Data = imageDataUrl.split(',')[1];
+            
+            // Create the request payload
+            const payload = {
+                agent_id: this.agentId,
+                inputs: [
+                    {
+                        type: "text",
+                        value: prompt
+                    },
+                    {
+                        type: "image",
+                        value: base64Data
+                    }
+                ]
+            };
+            
+            console.log('📤 Sending request to Dust.tt:', payload);
+            
+            const response = await fetch(`${this.baseUrl}/agents/${this.agentId}/runs`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${this.apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            console.log('📥 Initial response from Dust.tt:', result);
+            
+            // If we have a run_id, poll for the final result
+            if (result.run_id) {
+                return await this.pollForResult(result.run_id);
+            }
+            
+            return result;
+            
+        } catch (error) {
+            console.error('Error calling Dust.tt API:', error);
+            throw error;
+        }
+    }
+    
+    async pollForResult(runId, maxAttempts = 30) {
+        console.log('🔄 Polling for result, run ID:', runId);
+        
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                const status = await this.getRunStatus(runId);
+                console.log(`📊 Attempt ${attempt}: Status:`, status.status);
+                
+                if (status.status === 'completed') {
+                    console.log('✅ Run completed, final result:', status);
+                    return status;
+                } else if (status.status === 'failed') {
+                    throw new Error(`Run failed: ${status.error || 'Unknown error'}`);
+                } else if (status.status === 'cancelled') {
+                    throw new Error('Run was cancelled');
+                }
+                
+                // Wait 2 seconds before next poll
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+            } catch (error) {
+                console.error(`Error polling attempt ${attempt}:`, error);
+                if (attempt === maxAttempts) {
+                    throw error;
+                }
+            }
+        }
+        
+        throw new Error('Timeout waiting for Dust.tt response');
+    }
+    
+    async getRunStatus(runId) {
+        if (!this.apiKey || !this.agentId) {
+            throw new Error('API key or Agent ID not configured');
+        }
+        
+        try {
+            const response = await fetch(`${this.baseUrl}/agents/${this.agentId}/runs/${runId}`, {
+                headers: {
+                    'Authorization': `Bearer ${this.apiKey}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            return await response.json();
+            
+        } catch (error) {
+            console.error('Error getting run status:', error);
+            throw error;
+        }
+    }
+}
+
+// Global Dust.tt service instance
+const dustService = new DustTTService();
+
 class ImageCanvas {
     constructor() {
         this.canvas = document.getElementById('canvas');
@@ -27,11 +173,18 @@ class ImageCanvas {
         this.setupEventListeners();
         this.updateImageCount();
         this.hidePlaceholder();
+        this.loadConfiguration();
     }
     
     setupEventListeners() {
         this.uploadInput.addEventListener('change', (e) => this.handleImageUpload(e));
         this.clearBtn.addEventListener('click', () => this.clearAll());
+        
+        // Configuration panel events
+        const saveConfigBtn = document.getElementById('saveConfigBtn');
+        if (saveConfigBtn) {
+            saveConfigBtn.addEventListener('click', () => this.saveConfiguration());
+        }
         
         // Canvas events
         this.canvas.addEventListener('mousedown', (e) => this.startDrag(e));
@@ -355,54 +508,343 @@ class ImageCanvas {
         }
     }
     
-    startProcessing(imageContainer) {
+    async startProcessing(imageContainer) {
         this.isProcessing = true;
         
         // Enlarge the magnetic zone
         this.magneticZone.classList.add('processing');
         
-        // Update zone title to "Rating..."
+        // Update zone title to show rating process
         const zoneTitle = this.magneticZone.querySelector('.magnetic-zone-content p');
         if (zoneTitle) {
-            zoneTitle.textContent = 'Rating...';
+            zoneTitle.textContent = '🤖 AI Rating Your Design...';
         }
+        
+        // Add a processing indicator to the image
+        const processingIndicator = document.createElement('div');
+        processingIndicator.className = 'processing-indicator';
+        processingIndicator.innerHTML = `
+            <div class="processing-spinner"></div>
+            <div class="processing-text">AI analyzing...</div>
+        `;
+        imageContainer.appendChild(processingIndicator);
         
         // Add loading state to the image
         imageContainer.classList.add('processing');
         
-        // Simulate processing time (you can replace this with actual processing logic)
-        setTimeout(() => {
-            this.completeProcessing(imageContainer);
-        }, 10000); // 10 seconds processing time
+        try {
+            // Get the image data URL
+            const img = imageContainer.querySelector('img');
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Set canvas dimensions to match image
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            
+            // Draw image to canvas to get data URL
+            ctx.drawImage(img, 0, 0);
+            const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+            
+            // Call Dust.tt API with specific design rating request
+            const ratingPrompt = `Please rate this design on a scale of 1-10 and provide detailed feedback. 
+
+Please analyze and rate the following aspects:
+1. **Overall Design Rating**: Give a score from 1-10
+2. **Composition**: How well is the layout balanced and organized?
+3. **Color Usage**: Are the colors harmonious and effective?
+4. **Style & Aesthetics**: How appealing and modern is the design?
+5. **Impact**: How strong is the visual impact and message?
+
+For each aspect, provide:
+- A rating (1-10)
+- Specific feedback on what works well
+- Concrete suggestions for improvement
+- Overall recommendation
+
+Please format your response clearly with ratings and actionable feedback.`;
+            
+            console.log('🤖 Sending design to Dust.tt AI for rating...');
+            const result = await dustService.analyzeImage(imageDataUrl, ratingPrompt);
+            console.log('✅ AI Rating received:', result);
+            
+            // Store the result for later use
+            imageContainer.setAttribute('data-ai-result', JSON.stringify(result));
+            
+            // Complete processing with AI result
+            this.completeProcessing(imageContainer, result);
+            
+        } catch (error) {
+            console.error('❌ Error processing image with AI:', error);
+            
+            // Show error state
+            this.showProcessingError(imageContainer, error.message);
+            
+            // Also try to create a frame with error information
+            this.createAIResponseFrame(
+                `Error: ${error.message}\n\nPlease check your Dust.tt API configuration and try again.`,
+                null,
+                '',
+                imageContainer
+            );
+        }
     }
     
-    completeProcessing(imageContainer) {
+    completeProcessing(imageContainer, aiResult) {
         this.isProcessing = false;
         
         // Remove processing state from zone
         this.magneticZone.classList.remove('processing');
         
-        // Restore zone title to "Rate my designs"
+        // Restore zone title to "Drop here for AI Design Rating"
         const zoneTitle = this.magneticZone.querySelector('.magnetic-zone-content p');
         if (zoneTitle) {
-            zoneTitle.textContent = 'Rate my designs';
+            zoneTitle.textContent = '🎯 Drop here for AI Design Rating';
         }
         
         // Remove processing state from image
         imageContainer.classList.remove('processing');
         
+        // Remove processing indicator
+        const processingIndicator = imageContainer.querySelector('.processing-indicator');
+        if (processingIndicator) {
+            processingIndicator.remove();
+        }
+        
         // Add completion state
         imageContainer.classList.add('processed');
         
-        // Show completion message briefly
-        const completionMsg = document.createElement('div');
-        completionMsg.className = 'completion-message';
-        completionMsg.innerHTML = '✅ Processing complete!';
-        imageContainer.appendChild(completionMsg);
+        // Show AI feedback
+        this.showAIFeedback(imageContainer, aiResult);
+    }
+    
+    showAIFeedback(imageContainer, aiResult) {
+        // Remove any existing feedback
+        const existingFeedback = imageContainer.querySelector('.ai-feedback');
+        if (existingFeedback) {
+            existingFeedback.remove();
+        }
         
+        // Extract the AI response text from Dust.tt API response
+        let feedbackText = 'AI analysis complete!';
+        console.log('🔍 Processing AI result:', aiResult);
+        
+        if (aiResult && aiResult.outputs && aiResult.outputs.length > 0) {
+            // Dust.tt typically returns outputs array
+            const output = aiResult.outputs[0];
+            if (output && output.value) {
+                feedbackText = output.value;
+            }
+        } else if (aiResult && aiResult.output) {
+            // Fallback to output field
+            if (aiResult.output.text) {
+                feedbackText = aiResult.output.text;
+            } else if (aiResult.output.value) {
+                feedbackText = aiResult.output.value;
+            } else if (typeof aiResult.output === 'string') {
+                feedbackText = aiResult.output;
+            }
+        } else if (aiResult && aiResult.result) {
+            // Another possible response format
+            feedbackText = aiResult.result;
+        }
+        
+        console.log('📝 Extracted feedback text:', feedbackText);
+        
+        // Try to extract rating from feedback text
+        const ratingMatch = feedbackText.match(/(?:rating|score|grade)\s*[:\-]?\s*(\d+(?:\.\d+)?)\s*\/\s*10/i);
+        const overallRating = ratingMatch ? ratingMatch[1] : null;
+        
+        // Create rating display if found
+        let ratingDisplay = '';
+        if (overallRating) {
+            const rating = parseFloat(overallRating);
+            let ratingColor = '#10b981'; // Green for high ratings
+            let ratingEmoji = '🎯';
+            
+            if (rating < 5) {
+                ratingColor = '#ef4444'; // Red for low ratings
+                ratingEmoji = '⚠️';
+            } else if (rating < 7) {
+                ratingColor = '#f59e0b'; // Orange for medium ratings
+                ratingEmoji = '📊';
+            } else if (rating >= 9) {
+                ratingEmoji = '🏆';
+            }
+            
+            ratingDisplay = `
+                <div class="rating-display" style="background: ${ratingColor}20; border: 2px solid ${ratingColor};">
+                    <span class="rating-emoji">${ratingEmoji}</span>
+                    <span class="rating-score" style="color: ${ratingColor};">${overallRating}/10</span>
+                </div>
+            `;
+        }
+        
+        // Create a new AI response frame on the canvas
+        this.createAIResponseFrame(feedbackText, overallRating, ratingDisplay, imageContainer);
+    }
+    
+    createAIResponseFrame(feedbackText, overallRating, ratingDisplay, sourceImage) {
+        console.log('🎨 Creating AI response frame for:', feedbackText.substring(0, 100) + '...');
+        
+        // Remove any existing AI response frames
+        const existingFrames = document.querySelectorAll('.ai-response-frame');
+        existingFrames.forEach(frame => frame.remove());
+        
+        // Create the frame container
+        const responseFrame = document.createElement('div');
+        responseFrame.className = 'ai-response-frame';
+        
+        // Position the frame near the source image but not overlapping
+        const imageRect = sourceImage.getBoundingClientRect();
+        const canvasRect = this.canvas.getBoundingClientRect();
+        
+        console.log('📍 Image position:', { left: imageRect.left, top: imageRect.top, right: imageRect.right, bottom: imageRect.bottom });
+        console.log('🎯 Canvas bounds:', { width: canvasRect.width, height: canvasRect.height });
+        
+        // Calculate position to the right of the image
+        let frameX = imageRect.right - canvasRect.left + 20;
+        let frameY = imageRect.top - canvasRect.top;
+        
+        // Ensure frame stays within canvas bounds
+        const maxX = canvasRect.width - 400; // 400px is max frame width
+        if (frameX > maxX) {
+            frameX = imageRect.left - canvasRect.left - 420; // Position to the left instead
+        }
+        
+        const maxY = canvasRect.height - 300; // 300px is max frame height
+        if (frameY > maxY) {
+            frameY = maxY;
+        }
+        
+        // Ensure minimum positions
+        frameX = Math.max(20, frameX);
+        frameY = Math.max(20, frameY);
+        
+        console.log('🎯 Frame position:', { x: frameX, y: frameY });
+        
+        responseFrame.style.left = frameX + 'px';
+        responseFrame.style.top = frameY + 'px';
+        
+        // Create frame content
+        const frameContent = `
+            <div class="frame-header">
+                <span class="frame-icon">🤖</span>
+                <span class="frame-title">AI Design Rating</span>
+            </div>
+            ${ratingDisplay}
+            <div class="frame-content">
+                ${feedbackText}
+            </div>
+            <div class="frame-actions">
+                <button class="frame-btn" onclick="this.closest('.ai-response-frame').remove()">Close</button>
+                <button class="frame-btn primary" onclick="this.closest('.ai-response-frame').classList.toggle('expanded')">
+                    ${feedbackText.length > 300 ? 'Expand' : 'Collapse'}
+                </button>
+            </div>
+        `;
+        
+        responseFrame.innerHTML = frameContent;
+        
+        // Add to canvas
+        this.canvas.appendChild(responseFrame);
+        
+        // Make frame draggable
+        this.makeFrameDraggable(responseFrame);
+        
+        // Auto-remove after 30 seconds (increased for better reading)
         setTimeout(() => {
-            completionMsg.remove();
-        }, 2000);
+            if (responseFrame.parentElement) {
+                responseFrame.style.opacity = '0';
+                setTimeout(() => responseFrame.remove(), 300);
+            }
+        }, 30000);
+    }
+    
+    makeFrameDraggable(frame) {
+        let isDragging = false;
+        let startX, startY, startLeft, startTop;
+        
+        const header = frame.querySelector('.frame-header');
+        header.style.cursor = 'grab';
+        
+        header.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+            startLeft = parseInt(frame.style.left) || 0;
+            startTop = parseInt(frame.style.top) || 0;
+            header.style.cursor = 'grabbing';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
+            
+            const newLeft = startLeft + deltaX;
+            const newTop = startTop + deltaY;
+            
+            // Keep frame within canvas bounds
+            const canvasRect = this.canvas.getBoundingClientRect();
+            const frameRect = frame.getBoundingClientRect();
+            
+            const maxLeft = canvasRect.width - frameRect.width;
+            const maxTop = canvasRect.height - frameRect.height;
+            
+            frame.style.left = Math.max(0, Math.min(newLeft, maxLeft)) + 'px';
+            frame.style.top = Math.max(0, Math.min(newTop, maxTop)) + 'px';
+        });
+        
+        document.addEventListener('mouseup', () => {
+            isDragging = false;
+            header.style.cursor = 'grab';
+        });
+    }
+    
+    showProcessingError(imageContainer, errorMessage) {
+        this.isProcessing = false;
+        
+        // Remove processing state from zone
+        this.magneticZone.classList.remove('processing');
+        
+        // Restore zone title
+        const zoneTitle = this.magneticZone.querySelector('.magnetic-zone-content p');
+        if (zoneTitle) {
+            zoneTitle.textContent = '🎯 Drop here for AI Design Rating';
+        }
+        
+        // Remove processing state from image
+        imageContainer.classList.remove('processing');
+        
+        // Remove processing indicator
+        const processingIndicator = imageContainer.querySelector('.processing-indicator');
+        if (processingIndicator) {
+            processingIndicator.remove();
+        }
+        
+        // Show error message
+        const errorMsg = document.createElement('div');
+        errorMsg.className = 'error-message';
+        errorMsg.innerHTML = `
+            <div class="error-header">
+                <span class="error-icon">❌</span>
+                <span class="error-title">Processing Error</span>
+            </div>
+            <div class="error-content">${errorMessage}</div>
+        `;
+        
+        imageContainer.appendChild(errorMsg);
+        
+        // Remove error after 5 seconds
+        setTimeout(() => {
+            if (errorMsg.parentElement) {
+                errorMsg.style.opacity = '0';
+                setTimeout(() => errorMsg.remove(), 300);
+            }
+        }, 5000);
     }
     
     ejectImageFromZone(imageContainer) {
@@ -767,6 +1209,54 @@ class ImageCanvas {
         const placeholder = this.canvas.querySelector('.canvas-placeholder');
         if (placeholder) {
             placeholder.style.display = 'block';
+        }
+    }
+    
+    loadConfiguration() {
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const agentIdInput = document.getElementById('agentIdInput');
+        
+        if (apiKeyInput && agentIdInput) {
+            // Load saved values from localStorage
+            const savedApiKey = localStorage.getItem('dust_api_key');
+            const savedAgentId = localStorage.getItem('dust_agent_id');
+            
+            if (savedApiKey) apiKeyInput.value = savedApiKey;
+            if (savedAgentId) agentIdInput.value = savedAgentId;
+        }
+    }
+    
+    saveConfiguration() {
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const agentIdInput = document.getElementById('agentIdInput');
+        const configStatus = document.getElementById('configStatus');
+        
+        if (apiKeyInput && agentIdInput && configStatus) {
+            const apiKey = apiKeyInput.value.trim();
+            const agentId = agentIdInput.value.trim();
+            
+            if (!apiKey || !agentId) {
+                configStatus.textContent = '❌ Please fill in both fields';
+                configStatus.style.color = '#ef4444';
+                return;
+            }
+            
+            // Save to localStorage
+            localStorage.setItem('dust_api_key', apiKey);
+            localStorage.setItem('dust_agent_id', agentId);
+            
+            // Update the global service
+            dustService.apiKey = apiKey;
+            dustService.agentId = agentId;
+            
+            // Show success message
+            configStatus.textContent = '✅ Settings saved successfully!';
+            configStatus.style.color = '#10b981';
+            
+            // Clear message after 3 seconds
+            setTimeout(() => {
+                configStatus.textContent = '';
+            }, 3000);
         }
     }
 }

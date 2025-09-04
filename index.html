@@ -31,15 +31,29 @@
         </div>
     </div>
     
+    <!-- Configuration Panel -->
+    <div class="config-panel" id="configPanel">
+        <div class="config-header" onclick="document.getElementById('configPanel').classList.toggle('collapsed')">
+            <h3>🤖 Dust.tt AI Settings</h3>
+            <span class="config-toggle">▼</span>
+        </div>
+        <div class="config-content">
+            <input type="text" id="apiKeyInput" class="config-input" placeholder="API Key" />
+            <input type="text" id="agentIdInput" class="config-input" placeholder="Agent ID" />
+            <button id="saveConfigBtn" class="config-btn">Save Settings</button>
+            <div id="configStatus" style="font-size: 0.75rem; margin-top: 0.5rem; opacity: 0.7;"></div>
+        </div>
+    </div>
+    
     <!-- Full Screen Canvas -->
     <div id="canvas" class="fullscreen-canvas">
                           <!-- Magnetic Central Zone -->
                   <div class="magnetic-zone">
                       <div class="magnetic-zone-border">
-                          <div class="magnetic-zone-content">
-                              <p class="text-lg font-semibold text-muted-foreground">Rate my designs</p>
-                              <div class="grey-zone"></div>
-                          </div>
+                                            <div class="magnetic-zone-content">
+                      <p class="text-lg font-semibold text-muted-foreground">🎯 Drop here for AI Design Rating</p>
+                      <div class="grey-zone"></div>
+                  </div>
                       </div>
                   </div>
         

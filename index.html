@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Canvas - ShadCN Style</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body class="min-h-screen bg-background">
+    <!-- Floating Toolbar -->
+    <div class="floating-toolbar">
+        <div class="toolbar-content">
+            <input type="file" id="imageUpload" accept="image/*" multiple class="hidden">
+            <label for="imageUpload" class="btn btn-primary cursor-pointer">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                </svg>
+                Upload Images
+            </label>
+            
+            <button id="clearBtn" class="btn btn-destructive">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                </svg>
+                Clear All
+            </button>
+            
+            <div class="image-counter">
+                <span id="imageCount">0 images</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Full Screen Canvas -->
+    <div id="canvas" class="fullscreen-canvas">
+                          <!-- Magnetic Central Zone -->
+                  <div class="magnetic-zone">
+                      <div class="magnetic-zone-border">
+                          <div class="magnetic-zone-content">
+                              <p class="text-lg font-semibold text-muted-foreground">Rate my designs</p>
+                              <div class="grey-zone"></div>
+                          </div>
+                      </div>
+                  </div>
+        
+
+    
+    <script src="script.js"></script>
+</body>
+</html>

@@ -7,55 +7,52 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Infinite Canvas -->
-    <div class="canvas" id="canvas">
-        <!-- Upload Box - Centered -->
-        <div class="upload-box" id="uploadBox">
-            <div class="upload-content">
-                <div class="plus-icon">+</div>
-                <p class="upload-text">Drop your image here</p>
+    <!-- Canvas Container -->
+    <div class="canvas-container" id="canvasContainer">
+        <!-- Canvas Content - This gets transformed -->
+        <div class="canvas-content">
+            <!-- Design Container -->
+            <div class="design-container" id="designContainer">
+                <div class="container-header">
+                    <h2 class="container-title">Rate my designs</h2>
+                </div>
+                <div class="design-drop-zone" id="designDropZone">
+                    <input type="file" id="imageUpload" accept="image/*" class="hidden">
+                    <div class="drop-zone-content">
+                        <div class="plus-icon">+</div>
+                    </div>
+                </div>
             </div>
-            <input type="file" id="fileInput" accept="image/*" class="hidden">
+            
+            <!-- Generated Designs Container (Hidden initially) -->
+            <div class="generated-designs-container hidden" id="generatedDesignsContainer">
+                <div class="generated-header">
+                    <h3>Generated Designs</h3>
+                </div>
+                <div class="generated-designs" id="generatedDesigns"></div>
+            </div>
         </div>
     </div>
     
-    <!-- Floating Textbox -->
-    <div class="floating-textbox" id="floatingTextbox">
-        <input type="text" id="textInput" placeholder="Ask something ..." />
-        <button id="sendButton" class="send-btn">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M22 2L11 13"></path>
-                <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
-            </svg>
-        </button>
+    <!-- Chat Interface - Outside canvas container -->
+    <div class="chat-interface">
+        <!-- Chat Messages (Expandable) -->
+        <div class="chat-messages" id="chatMessages"></div>
+        
+        <!-- Chat Input -->
+        <div class="chat-input-container">
+            <div class="chat-input">
+                <input type="text" id="chatInput" placeholder="Ask something ..." />
+                <button id="sendBtn" class="send-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 2L11 13"></path>
+                        <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
     </div>
     
     <script src="script.js"></script>
-    <script>
-        // Simple test to see if elements are visible
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log('DOM loaded, checking elements...');
-            const canvas = document.getElementById('canvas');
-            const uploadBox = document.getElementById('uploadBox');
-            const textbox = document.getElementById('floatingTextbox');
-            
-            console.log('Canvas:', canvas);
-            console.log('Upload box:', uploadBox);
-            console.log('Textbox:', textbox);
-            
-            if (canvas) {
-                canvas.style.border = '2px solid red';
-                console.log('Canvas found and styled');
-            }
-            if (uploadBox) {
-                uploadBox.style.border = '2px solid blue';
-                console.log('Upload box found and styled');
-            }
-            if (textbox) {
-                textbox.style.border = '2px solid green';
-                console.log('Textbox found and styled');
-            }
-        });
-    </script>
 </body>
 </html>

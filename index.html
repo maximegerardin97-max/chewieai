@@ -7,50 +7,43 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Canvas Container -->
-    <div class="canvas-container" id="canvasContainer">
-        <!-- Canvas Content - This gets transformed -->
-        <div class="canvas-content">
-            <!-- Design Container -->
-            <div class="design-container" id="designContainer">
-                <div class="container-header">
-                    <h2 class="container-title">Rate my designs</h2>
-                </div>
-                <div class="design-drop-zone" id="designDropZone">
-                    <input type="file" id="imageUpload" accept="image/*" class="hidden">
-                    <div class="drop-zone-content">
-                        <div class="plus-icon">+</div>
-                    </div>
-                </div>
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Left Card - Upload -->
+        <div class="upload-card">
+            <div class="card-header">
+                <h2 class="card-title">Rate my designs</h2>
             </div>
-            
-            <!-- Generated Designs Container (Hidden initially) -->
-            <div class="generated-designs-container hidden" id="generatedDesignsContainer">
-                <div class="generated-header">
-                    <h3>Generated Designs</h3>
+            <div class="upload-zone" id="uploadZone">
+                <input type="file" id="imageUpload" accept="image/*" multiple class="hidden">
+                <div class="upload-content" id="uploadContent">
+                    <div class="plus-icon">+</div>
+                    <p class="upload-text">Drop your images here</p>
                 </div>
-                <div class="generated-designs" id="generatedDesigns"></div>
+                <div class="images-grid hidden" id="imagesGrid"></div>
+            </div>
+        </div>
+
+        <!-- Right Card - Feedback -->
+        <div class="feedback-card" id="feedbackCard">
+            <div class="card-header">
+                <h2 class="card-title">Rating...</h2>
+            </div>
+            <div class="feedback-content" id="feedbackContent">
+                <div class="placeholder-text">Upload a design to get AI feedback</div>
             </div>
         </div>
     </div>
     
-    <!-- Chat Interface - Outside canvas container -->
-    <div class="chat-interface">
-        <!-- Chat Messages (Expandable) -->
-        <div class="chat-messages" id="chatMessages"></div>
-        
-        <!-- Chat Input -->
-        <div class="chat-input-container">
-            <div class="chat-input">
-                <input type="text" id="chatInput" placeholder="Ask something ..." />
-                <button id="sendBtn" class="send-btn">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 2L11 13"></path>
-                        <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
-                    </svg>
-                </button>
-            </div>
-        </div>
+    <!-- Floating Chat Input -->
+    <div class="floating-chat">
+        <input type="text" id="chatInput" placeholder="Ask something..." />
+        <button id="sendBtn" class="send-btn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 2L11 13"></path>
+                <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+            </svg>
+        </button>
     </div>
     
     <script src="script.js"></script>

@@ -5,28 +5,80 @@ class DesignRatingApp {
         this.supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlpb2x2dmRuenJmY2ZmdWR3b2NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU2MTIxNzQsImV4cCI6MjA3MTE4ODE3NH0.zm_bLL3lu2hXKqZdIHzH-bIgVwd1cM1jb7Cju92sl6E';
         this.uploadedImages = [];
         this.isProcessing = false;
+        this.currentCardId = 1;
+        this.cardData = new Map(); // Store data for each card
         
         this.init();
     }
     
     init() {
         this.setupEventListeners();
+        this.initializeCard(1); // Initialize the first card
     }
     
-    setupEventListeners() {
-        // File upload
-        const imageUpload = document.getElementById('imageUpload');
-        const uploadZone = document.getElementById('uploadZone');
+    initializeCard(cardId) {
+        this.cardData.set(cardId, {
+            uploadedImages: [],
+            isProcessing: false
+        });
+    }
+    
+    createNewCard() {
+        this.currentCardId++;
+        const cardId = this.currentCardId;
         
-        imageUpload.addEventListener('change', (e) => this.handleFileUpload(e));
+        const cardHTML = `
+            <div class="upload-card" id="card-${cardId}">
+                <div class="card-header">
+                    <h2 class="card-title">Rate my designs</h2>
+                </div>
+                <div class="upload-content-container">
+                    <div class="upload-zone" id="uploadZone-${cardId}">
+                        <input type="file" id="imageUpload-${cardId}" accept="image/*" multiple class="hidden">
+                        <div class="upload-content" id="uploadContent-${cardId}">
+                            <div class="plus-icon">+</div>
+                        </div>
+                        <div class="images-grid hidden" id="imagesGrid-${cardId}"></div>
+                    </div>
+                    <div class="results-container hidden" id="resultsContainer-${cardId}">
+                        <div class="results-content" id="resultsContent-${cardId}">
+                            <div class="placeholder-text">Upload a design to get AI feedback</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="analyze-button-container hidden" id="analyzeButtonContainer-${cardId}">
+                    <button class="analyze-btn" id="analyzeBtn-${cardId}">Analyze</button>
+                </div>
+            </div>
+        `;
         
-        // Upload zone events
+        const uploadCardsStack = document.getElementById('uploadCardsStack');
+        uploadCardsStack.insertAdjacentHTML('afterbegin', cardHTML);
+        
+        this.initializeCard(cardId);
+        this.attachCardEventListeners(cardId);
+        
+        return cardId;
+    }
+    
+    attachCardEventListeners(cardId) {
+        const imageUpload = document.getElementById(`imageUpload-${cardId}`);
+        const uploadZone = document.getElementById(`uploadZone-${cardId}`);
+        const analyzeBtn = document.getElementById(`analyzeBtn-${cardId}`);
+        
+        imageUpload.addEventListener('change', (e) => this.handleFileUpload(e, cardId));
         uploadZone.addEventListener('click', () => imageUpload.click());
         uploadZone.addEventListener('dragover', (e) => this.handleDragOver(e));
         uploadZone.addEventListener('dragleave', (e) => this.handleDragLeave(e));
-        uploadZone.addEventListener('drop', (e) => this.handleDrop(e));
+        uploadZone.addEventListener('drop', (e) => this.handleDrop(e, cardId));
+        analyzeBtn.addEventListener('click', () => this.analyzeImages(cardId));
+    }
+    
+    setupEventListeners() {
+        // Attach listeners to the first card
+        this.attachCardEventListeners(1);
         
-        // Chat input
+        // Chat input (global)
         const chatInput = document.getElementById('chatInput');
         const sendBtn = document.getElementById('sendBtn');
         
@@ -38,7 +90,7 @@ class DesignRatingApp {
             }
         });
         
-        // Paste functionality
+        // Paste functionality (global)
         document.addEventListener('paste', (e) => this.handlePaste(e));
     }
     
@@ -52,20 +104,20 @@ class DesignRatingApp {
         e.currentTarget.classList.remove('drag-over');
     }
     
-    handleDrop(e) {
+    handleDrop(e, cardId) {
         e.preventDefault();
         e.currentTarget.classList.remove('drag-over');
         
         const files = Array.from(e.dataTransfer.files);
         if (files.length > 0) {
-            this.processFiles(files);
+            this.processFiles(files, cardId);
         }
     }
     
-    handleFileUpload(e) {
+    handleFileUpload(e, cardId) {
         const files = Array.from(e.target.files);
         if (files.length > 0) {
-            this.processFiles(files);
+            this.processFiles(files, cardId);
         }
         e.target.value = ''; // Reset input
     }
@@ -77,61 +129,79 @@ class DesignRatingApp {
             if (item.type.startsWith('image/')) {
                 const file = item.getAsFile();
                 if (file) {
-                    this.processFiles([file]);
+                    // Find the most recent card for paste
+                    const mostRecentCardId = this.currentCardId;
+                    this.processFiles([file], mostRecentCardId);
                 }
                 break;
             }
         }
     }
     
-    processFiles(files) {
+    processFiles(files, cardId) {
         const imageFiles = files.filter(file => file.type.startsWith('image/'));
         
         if (imageFiles.length === 0) {
-            this.showError('Please select image files only.');
+            this.showError('Please select image files only.', cardId);
             return;
         }
         
         imageFiles.forEach(file => {
             const reader = new FileReader();
             reader.onload = (e) => {
-                this.addImage(e.target.result, file.name);
+                this.addImage(e.target.result, file.name, cardId);
             };
             reader.readAsDataURL(file);
         });
     }
     
-    addImage(imageDataUrl, filename) {
+    addImage(imageDataUrl, filename, cardId) {
+        const cardData = this.cardData.get(cardId);
+        
+        // Check if we've reached the limit of 3 images
+        if (cardData.uploadedImages.length >= 3) {
+            this.showError('Maximum of 3 images allowed per iteration. Please remove an image before adding a new one.', cardId);
+            return;
+        }
+        
         const imageId = Date.now() + Math.random();
         const imageData = { id: imageId, url: imageDataUrl, filename };
         
-        this.uploadedImages.push(imageData);
-        this.updateUploadDisplay();
+        cardData.uploadedImages.push(imageData);
+        this.updateUploadDisplay(cardId);
     }
     
-    removeImage(imageId) {
-        this.uploadedImages = this.uploadedImages.filter(img => img.id !== imageId);
-        this.updateUploadDisplay();
+    removeImage(imageId, cardId) {
+        const cardData = this.cardData.get(cardId);
+        cardData.uploadedImages = cardData.uploadedImages.filter(img => img.id !== imageId);
+        this.updateUploadDisplay(cardId);
     }
     
-    updateUploadDisplay() {
-        const uploadContent = document.getElementById('uploadContent');
-        const imagesGrid = document.getElementById('imagesGrid');
+    updateUploadDisplay(cardId) {
+        const uploadContent = document.getElementById(`uploadContent-${cardId}`);
+        const imagesGrid = document.getElementById(`imagesGrid-${cardId}`);
+        const analyzeButtonContainer = document.getElementById(`analyzeButtonContainer-${cardId}`);
+        const uploadCard = document.getElementById(`card-${cardId}`);
+        const cardData = this.cardData.get(cardId);
         
-        if (this.uploadedImages.length === 0) {
+        if (cardData.uploadedImages.length === 0) {
             // Show upload prompt
             uploadContent.classList.remove('hidden');
             imagesGrid.classList.add('hidden');
+            analyzeButtonContainer.classList.add('hidden');
+            uploadCard.classList.add('without-results');
+            uploadCard.classList.remove('with-results');
         } else {
             // Show images grid
             uploadContent.classList.add('hidden');
             imagesGrid.classList.remove('hidden');
+            analyzeButtonContainer.classList.remove('hidden');
             
             // Clear and rebuild grid
             imagesGrid.innerHTML = '';
             
             // Add existing images
-            this.uploadedImages.forEach(imageData => {
+            cardData.uploadedImages.forEach(imageData => {
                 const imageItem = document.createElement('div');
                 imageItem.className = 'image-item';
                 
@@ -142,19 +212,54 @@ class DesignRatingApp {
                 const removeBtn = document.createElement('button');
                 removeBtn.className = 'remove-btn';
                 removeBtn.innerHTML = '×';
-                removeBtn.onclick = () => this.removeImage(imageData.id);
+                removeBtn.onclick = () => this.removeImage(imageData.id, cardId);
                 
                 imageItem.appendChild(img);
                 imageItem.appendChild(removeBtn);
                 imagesGrid.appendChild(imageItem);
             });
             
-            // Add "add more" button
-            const addMoreBtn = document.createElement('div');
-            addMoreBtn.className = 'add-more-btn';
-            addMoreBtn.innerHTML = '<div class="plus-icon">+</div><p>Add more</p>';
-            addMoreBtn.onclick = () => document.getElementById('imageUpload').click();
-            imagesGrid.appendChild(addMoreBtn);
+            // Add "add more" button only if under the limit
+            if (cardData.uploadedImages.length < 3) {
+                const addMoreBtn = document.createElement('div');
+                addMoreBtn.className = 'add-more-btn';
+                addMoreBtn.innerHTML = '<div class="plus-icon">+</div>';
+                addMoreBtn.onclick = () => document.getElementById(`imageUpload-${cardId}`).click();
+                imagesGrid.appendChild(addMoreBtn);
+            }
+        }
+    }
+    
+    async analyzeImages(cardId) {
+        const cardData = this.cardData.get(cardId);
+        
+        if (cardData.isProcessing) {
+            return;
+        }
+        
+        if (cardData.uploadedImages.length === 0) {
+            this.showResults('Please upload at least one image first.', cardId);
+            return;
+        }
+        
+        // Create new card immediately when analysis starts
+        const newCardId = this.createNewCard();
+        
+        // Show processing state in the current card
+        this.showResults('AI is analyzing your design...', cardId);
+        this.showResultsContainer(cardId);
+        cardData.isProcessing = true;
+        
+        try {
+            // For now, analyze the first image
+            const firstImage = cardData.uploadedImages[0];
+            const result = await this.analyzeDesign('Analyze this design', firstImage.url);
+            this.showResults(result, cardId);
+        } catch (error) {
+            console.error('Error:', error);
+            this.showResults('Sorry, I encountered an error. Please try again.', cardId);
+        } finally {
+            cardData.isProcessing = false;
         }
     }
     
@@ -166,33 +271,44 @@ class DesignRatingApp {
             return;
         }
         
-        if (this.isProcessing) {
+        // Find the most recent card with images
+        let targetCardId = null;
+        for (let i = this.currentCardId; i >= 1; i--) {
+            const cardData = this.cardData.get(i);
+            if (cardData && cardData.uploadedImages.length > 0 && !cardData.isProcessing) {
+                targetCardId = i;
+                break;
+            }
+        }
+        
+        if (!targetCardId) {
+            this.showError('Please upload at least one image first.');
             return;
         }
         
-        if (this.uploadedImages.length === 0) {
-            this.showFeedback('Please upload at least one image first.');
-            return;
-        }
+        const cardData = this.cardData.get(targetCardId);
         
         // Clear input
         chatInput.value = '';
         
-        // Show processing state
-        this.showFeedback('AI is analyzing your design...');
-        this.showFeedbackCard();
-        this.isProcessing = true;
+        // Create new card immediately when analysis starts
+        const newCardId = this.createNewCard();
+        
+        // Show processing state in the current card
+        this.showResults('AI is analyzing your design...', targetCardId);
+        this.showResultsContainer(targetCardId);
+        cardData.isProcessing = true;
         
         try {
             // For now, analyze the first image
-            const firstImage = this.uploadedImages[0];
+            const firstImage = cardData.uploadedImages[0];
             const result = await this.analyzeDesign(message, firstImage.url);
-            this.showFeedback(result);
+            this.showResults(result, targetCardId);
         } catch (error) {
             console.error('Error:', error);
-            this.showFeedback('Sorry, I encountered an error. Please try again.');
+            this.showResults('Sorry, I encountered an error. Please try again.', targetCardId);
         } finally {
-            this.isProcessing = false;
+            cardData.isProcessing = false;
         }
     }
     
@@ -234,6 +350,19 @@ class DesignRatingApp {
         }
     }
     
+    showResultsContainer(cardId) {
+        const resultsContainer = document.getElementById(`resultsContainer-${cardId}`);
+        const uploadCard = document.getElementById(`card-${cardId}`);
+        resultsContainer.classList.remove('hidden');
+        uploadCard.classList.add('with-results');
+        uploadCard.classList.remove('without-results');
+    }
+    
+    showResults(text, cardId) {
+        const resultsContent = document.getElementById(`resultsContent-${cardId}`);
+        resultsContent.innerHTML = `<div class="feedback-text">${text}</div>`;
+    }
+    
     showFeedbackCard() {
         const feedbackCard = document.getElementById('feedbackCard');
         feedbackCard.classList.add('visible');
@@ -244,9 +373,14 @@ class DesignRatingApp {
         feedbackContent.innerHTML = `<div class="feedback-text">${text}</div>`;
     }
     
-    showError(message) {
+    showError(message, cardId = null) {
         console.error(message);
-        this.showFeedback(`Error: ${message}`);
+        if (cardId) {
+            this.showResults(`Error: ${message}`, cardId);
+        } else {
+            // Show error in the most recent card
+            this.showResults(`Error: ${message}`, this.currentCardId);
+        }
     }
 }
 

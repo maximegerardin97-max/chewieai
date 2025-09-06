@@ -9,18 +9,30 @@
 <body>
     <!-- Main Container -->
     <div class="main-container">
-        <!-- Left Card - Upload -->
-        <div class="upload-card">
-            <div class="card-header">
-                <h2 class="card-title">Rate my designs</h2>
-            </div>
-            <div class="upload-zone" id="uploadZone">
-                <input type="file" id="imageUpload" accept="image/*" multiple class="hidden">
-                <div class="upload-content" id="uploadContent">
-                    <div class="plus-icon">+</div>
-                    <p class="upload-text">Drop your images here</p>
+        <!-- Upload Cards Stack -->
+        <div class="upload-cards-stack" id="uploadCardsStack">
+            <!-- Initial Upload Card -->
+            <div class="upload-card" id="card-1">
+                <div class="card-header">
+                    <h2 class="card-title">Rate my designs</h2>
                 </div>
-                <div class="images-grid hidden" id="imagesGrid"></div>
+                <div class="upload-content-container">
+                    <div class="upload-zone" id="uploadZone-1">
+                        <input type="file" id="imageUpload-1" accept="image/*" multiple class="hidden">
+                        <div class="upload-content" id="uploadContent-1">
+                            <div class="plus-icon">+</div>
+                        </div>
+                        <div class="images-grid hidden" id="imagesGrid-1"></div>
+                    </div>
+                    <div class="results-container hidden" id="resultsContainer-1">
+                        <div class="results-content" id="resultsContent-1">
+                            <div class="placeholder-text">Upload a design to get AI feedback</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="analyze-button-container hidden" id="analyzeButtonContainer-1">
+                    <button class="analyze-btn" id="analyzeBtn-1">Analyze</button>
+                </div>
             </div>
         </div>
 

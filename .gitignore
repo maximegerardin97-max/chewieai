@@ -1,0 +1,9 @@
+node_modules
+.env
+.DS_Store
+.next
+dist
+build
+script-local.js
+*.sh
+SECURITY_SETUP.md

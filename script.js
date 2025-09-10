@@ -12,7 +12,7 @@ const COMMAND_RE = /command\s*:?\s*send\s+([a-z0-9]+)\s+(.+)/i;
 class DesignRatingApp {
     constructor() {
         this.supabaseUrl = 'https://iiolvvdnzrfcffudwocp.supabase.co';
-        this.supabaseKey = 'YOUR_SUPABASE_ANON_KEY_HERE';
+        this.supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlpb2x2dmRuenJmY2ZmdWR3b2NwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc1MjE4MDAsImV4cCI6MjA3MzA5NzgwMH0.2-e8Scn26fqsR11h-g4avH8MWybwLTtcf3fCN9qAgVw';
         this.uploadedImages = [];
         this.isProcessing = false;
         this.currentCardId = 1;
@@ -1956,7 +1956,7 @@ Product: E-commerce App | Industry: Retail | Platform: Web
 
     async uploadFolder(appName, flowName, files, progressCallback) {
         const SUPABASE_URL = 'https://iiolvvdnzrfcffudwocp.supabase.co';
-        const SERVICE_KEY = 'YOUR_SUPABASE_SERVICE_KEY_HERE';
+        const SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imlpb2x2dmRuenJmY2ZmdWR3b2NwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NzUyMTgwMCwiZXhwIjoyMDczMDk3ODAwfQ.sDlDTwowtdPg2GV9DCl53nSURdYd15iQphrzS1oIcsw';
         const BUCKET = 'flows';
 
         // Sort files by name

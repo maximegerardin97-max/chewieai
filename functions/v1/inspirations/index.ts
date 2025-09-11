@@ -456,6 +456,8 @@ serve(async (req)=>{
     const recommendation = body?.recommendation ?? {};
     let app = (recommendation.app ?? "").toString().trim();
     let flow = (recommendation.flow ?? "").toString().trim();
+    // Normalize: strip platform prefix from flow (e.g., "ios watching spotify wrapped")
+    flow = flow.replace(/^\s*(ios|android|web|desktop)\s+/i, "").trim();
     // free-text fallback: "duolingo onboarding"
     if ((!app || !flow) && typeof recommendation.text === "string") {
       const t = recommendation.text.toLowerCase();

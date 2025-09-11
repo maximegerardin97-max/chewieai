@@ -1794,21 +1794,11 @@ Product: E-commerce App | Industry: Retail | Platform: Web
             urls: best.screens.map(x => x.imageUrl)
         });
 
-        const screensHtml = best.screens.map((s, idx) => {
-            const rawUrl = String(s.imageUrl || '');
-            let safeUrl = rawUrl;
-            try {
-                const u = new URL(rawUrl);
-                const encodedPath = u.pathname.split('/').map(part => part === '' ? '' : encodeURIComponent(decodeURIComponent(part))).join('/');
-                safeUrl = `${u.origin}${encodedPath}${u.search || ''}`;
-            } catch (_) {
-                // Fallback: minimally escape spaces
-                safeUrl = rawUrl.replace(/\s/g, '%20');
-            }
-            console.debug('[INSPIRATIONS IMG URL]', { idx, rawUrl, safeUrl });
+        const screensHtml = best.screens.map((s) => {
+            const url = String(s.imageUrl || '');
             return `
                 <div class=\"flow-screen\"> 
-                  <img src=\"${safeUrl}\" data-raw-url=\"${rawUrl}\" alt=\"${best.appName} ${best.flowName}\" onerror=\"window.__retryImg && window.__retryImg(this);\"> 
+                  <img src=\"${url}\" alt=\"${best.appName} ${best.flowName}\" loading=\"eager\" decoding=\"async\" onerror=\"this.onerror=null; this.src=encodeURI('${url}');\"> 
                 </div>`;
         }).join('');
 

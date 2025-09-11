@@ -515,7 +515,9 @@ serve(async (req)=>{
             const idx = s.image_url.indexOf(marker);
             if (idx !== -1) {
               const objectPath = s.image_url.substring(idx + marker.length);
-              const signed = await signStorageObject(objectPath);
+              // DB may store URL-encoded names; decode before signing
+              const decodedPath = decodeURIComponent(objectPath);
+              const signed = await signStorageObject(decodedPath);
               if (signed) finalUrl = signed;
             }
           }
@@ -531,8 +533,10 @@ serve(async (req)=>{
       const imgs = listed.filter((f)=>/\.(png|jpg|jpeg|webp)$/i.test(f.name)).sort((a, b)=>numerically(a.name, b.name));
       // Prefer signed URLs so it works even when bucket isn't public
       const signed = await Promise.all(imgs.map(async (f, i)=>{
+        // Ensure proper decoding before signing in case folder or name are URL-encoded
         const objectPath = `${folder}/${f.name}`;
-        const signedUrl = await signStorageObject(objectPath);
+        const decodedPath = decodeURIComponent(objectPath);
+        const signedUrl = await signStorageObject(decodedPath);
         return {
           order: i + 1,
           imageUrl: signedUrl || `${SUPABASE_URL}/storage/v1/object/public/flows/${encodeURI(folder)}/${encodeURI(f.name)}`

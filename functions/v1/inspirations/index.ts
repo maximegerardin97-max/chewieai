@@ -367,6 +367,26 @@ async function listStorage(prefix) {
   return arr;
 }
 
+// Create a short-lived signed URL for a storage object so images render even if the bucket is private
+async function signStorageObject(objectPath) {
+  const signRes = await fetch(`${SUPABASE_URL}/storage/v1/object/sign/flows/${encodeURI(objectPath)}`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${SERVICE_KEY}`,
+      "apikey": SERVICE_KEY,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ expiresIn: 60 * 60 }) // 1 hour
+  });
+  if (!signRes.ok) {
+    return null;
+  }
+  const data = await signRes.json();
+  // Endpoint returns { signedURL: "/storage/v1/object/sign/..." }
+  const relative = data?.signedURL;
+  return relative ? `${SUPABASE_URL}${relative}` : null;
+}
+
 // Perplexity search function
 async function searchPerplexity(app, flow) {
   try {
@@ -486,18 +506,39 @@ serve(async (req)=>{
     let payloadScreens = [];
     if (screens.length > 0) {
       const flowRow = flows[0];
-      payloadScreens = screens.filter((s)=>s.flow_id === flowRow.id).map((s)=>({
+      const filtered = screens.filter((s)=>s.flow_id === flowRow.id);
+      payloadScreens = await Promise.all(filtered.map(async (s)=>{
+        let finalUrl = s.image_url || null;
+        try {
+          if (typeof s.image_url === "string" && s.image_url.includes("/storage/v1/object/")) {
+            const marker = "/flows/";
+            const idx = s.image_url.indexOf(marker);
+            if (idx !== -1) {
+              const objectPath = s.image_url.substring(idx + marker.length);
+              const signed = await signStorageObject(objectPath);
+              if (signed) finalUrl = signed;
+            }
+          }
+        } catch {}
+        return {
           order: s.order_index,
-          imageUrl: s.image_url,
+          imageUrl: finalUrl,
           caption: s.caption ?? null
-        }));
+        };
+      }));
     } else {
       const listed = await listStorage(folder);
       const imgs = listed.filter((f)=>/\.(png|jpg|jpeg|webp)$/i.test(f.name)).sort((a, b)=>numerically(a.name, b.name));
-      payloadScreens = imgs.map((f, i)=>({
+      // Prefer signed URLs so it works even when bucket isn't public
+      const signed = await Promise.all(imgs.map(async (f, i)=>{
+        const objectPath = `${folder}/${f.name}`;
+        const signedUrl = await signStorageObject(objectPath);
+        return {
           order: i + 1,
-          imageUrl: `${SUPABASE_URL}/storage/v1/object/public/flows/${encodeURI(folder)}/${encodeURI(f.name)}`
-        }));
+          imageUrl: signedUrl || `${SUPABASE_URL}/storage/v1/object/public/flows/${encodeURI(folder)}/${encodeURI(f.name)}`
+        };
+      }));
+      payloadScreens = signed;
     }
     // If we found screens, return them
     if (payloadScreens.length > 0) {

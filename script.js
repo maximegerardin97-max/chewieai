@@ -1753,16 +1753,27 @@ Product: E-commerce App | Industry: Retail | Platform: Web
             return;
         }
         const best = nonEmpty.sort((a,b) => b.screens.length - a.screens.length)[0];
+        const screensHtml = best.screens.map((s) => {
+            const rawUrl = String(s.imageUrl || '');
+            let safeUrl = rawUrl;
+            try {
+                const u = new URL(rawUrl);
+                const encodedPath = u.pathname.split('/').map(part => part === '' ? '' : encodeURIComponent(decodeURIComponent(part))).join('/');
+                safeUrl = `${u.origin}${encodedPath}${u.search || ''}`;
+            } catch (_) {
+                // Fallback: minimally escape spaces
+                safeUrl = rawUrl.replace(/\s/g, '%20');
+            }
+            return `
+                <div class=\"flow-screen\"> 
+                  <img src=\"${safeUrl}\" alt=\"${best.appName} ${best.flowName}\" onerror=\"this.onerror=null; this.src=this.src.replace(/\\s/g,'%20');\"> 
+                </div>`;
+        }).join('');
+
         inspContent.innerHTML = `
           <div class="flow-group">
             <div class="flow-title">${best.appName} — ${best.flowName}</div>
-            <div class="flows">
-              ${best.screens.map(s => `
-                <div class=\"flow-screen\"> 
-                  <img src=\"${s.imageUrl}\" alt=\"${best.appName} ${best.flowName}\"> 
-                </div>
-              `).join('')}
-            </div>
+            <div class="flows">${screensHtml}</div>
           </div>`;
     }
 

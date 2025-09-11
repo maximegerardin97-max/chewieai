@@ -1753,6 +1753,40 @@ Product: E-commerce App | Industry: Retail | Platform: Web
             return;
         }
         const best = nonEmpty.sort((a,b) => b.screens.length - a.screens.length)[0];
+        // lightweight global retry for broken image URLs (encoding variants)
+        if (!window.__retryImg) {
+            window.__retryImg = function(imgEl) {
+                try {
+                    const tried = imgEl.getAttribute('data-tried') || '';
+                    const triedSet = new Set(tried.split('|').filter(Boolean));
+                    const variants = [];
+                    const raw = imgEl.getAttribute('data-raw-url') || imgEl.src || '';
+                    // 1) replace spaces
+                    variants.push(raw.replace(/\s/g, '%20'));
+                    // 2) encode each path segment
+                    try {
+                        const u = new URL(raw);
+                        const segs = u.pathname.split('/').map(p => p === '' ? '' : encodeURIComponent(decodeURIComponent(p)));
+                        variants.push(`${u.origin}${segs.join('/')}${u.search || ''}`);
+                    } catch {}
+                    // 3) double-encode segments (handles already-encoded special chars)
+                    try {
+                        const u2 = new URL(raw);
+                        const segs2 = u2.pathname.split('/').map(p => p === '' ? '' : encodeURIComponent(p));
+                        variants.push(`${u2.origin}${segs2.join('/')}${u2.search || ''}`);
+                    } catch {}
+                    for (const v of variants) {
+                        if (!triedSet.has(v)) {
+                            triedSet.add(v);
+                            imgEl.setAttribute('data-tried', Array.from(triedSet).join('|'));
+                            imgEl.src = v;
+                            return;
+                        }
+                    }
+                } catch (e) { console.warn('retryImg failed', e); }
+            };
+        }
+
         const screensHtml = best.screens.map((s) => {
             const rawUrl = String(s.imageUrl || '');
             let safeUrl = rawUrl;
@@ -1766,7 +1800,7 @@ Product: E-commerce App | Industry: Retail | Platform: Web
             }
             return `
                 <div class=\"flow-screen\"> 
-                  <img src=\"${safeUrl}\" alt=\"${best.appName} ${best.flowName}\" onerror=\"this.onerror=null; this.src=this.src.replace(/\\s/g,'%20');\"> 
+                  <img src=\"${safeUrl}\" data-raw-url=\"${rawUrl}\" alt=\"${best.appName} ${best.flowName}\" onerror=\"window.__retryImg && window.__retryImg(this);\"> 
                 </div>`;
         }).join('');
 

@@ -1787,7 +1787,14 @@ Product: E-commerce App | Industry: Retail | Platform: Web
             };
         }
 
-        const screensHtml = best.screens.map((s) => {
+        console.debug('[INSPIRATIONS IMAGES]', {
+            app: best.appName,
+            flow: best.flowName,
+            count: best.screens.length,
+            urls: best.screens.map(x => x.imageUrl)
+        });
+
+        const screensHtml = best.screens.map((s, idx) => {
             const rawUrl = String(s.imageUrl || '');
             let safeUrl = rawUrl;
             try {
@@ -1798,6 +1805,7 @@ Product: E-commerce App | Industry: Retail | Platform: Web
                 // Fallback: minimally escape spaces
                 safeUrl = rawUrl.replace(/\s/g, '%20');
             }
+            console.debug('[INSPIRATIONS IMG URL]', { idx, rawUrl, safeUrl });
             return `
                 <div class=\"flow-screen\"> 
                   <img src=\"${safeUrl}\" data-raw-url=\"${rawUrl}\" alt=\"${best.appName} ${best.flowName}\" onerror=\"window.__retryImg && window.__retryImg(this);\"> 
